@@ -8,6 +8,7 @@ import {
   registerTyProviders,
   setDiagnostics,
   type TySession,
+  type TyDiagnostic,
   type TyState,
   updateTyFile,
 } from './tyWasmClient'
@@ -31,6 +32,7 @@ export type TyMonacoSession = {
   editableLineCount: number
   handleMount: OnMount
   resetSource: () => void
+  diagnostics: TyDiagnostic[]
 }
 
 export function useTyMonacoSession({
@@ -46,6 +48,7 @@ export function useTyMonacoSession({
     version: null,
     message: 'Loading ty WASM...',
   })
+  const [diagnostics, setDiagnosticsState] = useState<TyDiagnostic[]>([])
 
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null)
   const monacoRef = useRef<typeof import('monaco-editor') | null>(null)
@@ -56,6 +59,7 @@ export function useTyMonacoSession({
   const contentListenerRef = useRef<{ dispose: () => void } | null>(null)
   const providersDisposeRef = useRef<(() => void) | null>(null)
   const languageDisposeRef = useRef<{ dispose: () => void } | null>(null)
+  const signatureDecorationsRef = useRef<string[]>([])
   const mountTokenRef = useRef(0)
   const normalizedPrelude = predefinedPython.endsWith('\n')
     ? predefinedPython
@@ -72,6 +76,7 @@ export function useTyMonacoSession({
       contentListenerRef.current?.dispose()
       providersDisposeRef.current?.()
       languageDisposeRef.current?.dispose()
+      editorRef.current?.deltaDecorations(signatureDecorationsRef.current, [])
       contentListenerRef.current = null
       providersDisposeRef.current = null
       languageDisposeRef.current = null
@@ -96,13 +101,14 @@ export function useTyMonacoSession({
     }
 
     try {
-      setDiagnostics(monaco, model, session, hiddenLineCount)
+      setDiagnosticsState(setDiagnostics(monaco, model, session, hiddenLineCount))
     } catch (error) {
       setTyState({
         status: 'error',
         version: null,
         message: formatError(error),
       })
+      setDiagnosticsState([])
     }
   }
 
@@ -130,6 +136,38 @@ export function useTyMonacoSession({
     }
 
     model.updateOptions({ tabSize: 4, insertSpaces: true })
+    const updateSignatureDecorations = () => {
+      signatureDecorationsRef.current = editorInstance.deltaDecorations(
+        signatureDecorationsRef.current,
+        findSignatureLines(model, editableDefinitions).map((line) => ({
+          range: {
+            startLineNumber: line,
+            startColumn: 1,
+            endLineNumber: line,
+            endColumn: model.getLineMaxColumn(line),
+          },
+          options: {
+            isWholeLine: true,
+            className: 'fixed-python-line',
+            linesDecorationsClassName: 'fixed-python-decoration',
+            glyphMarginClassName: 'fixed-python-glyph',
+          },
+        })),
+      )
+    }
+    updateSignatureDecorations()
+    const keydownListener = editorInstance.onKeyDown((event) => {
+      const selection = editorInstance.getSelection()
+
+      if (
+        selection != null &&
+        selectionTouchesSignature(selection, model, editableDefinitions) &&
+        isMutatingKey(event.browserEvent)
+      ) {
+        event.browserEvent.preventDefault()
+        event.browserEvent.stopPropagation()
+      }
+    })
     contentListenerRef.current = model.onDidChangeContent(() => {
       if (restoringRef.current) {
         return
@@ -140,12 +178,14 @@ export function useTyMonacoSession({
         model.setValue(lastGoodSourceRef.current)
         editorInstance.setPosition({ lineNumber: 2, column: 5 })
         restoringRef.current = false
+        updateSignatureDecorations()
         return
       }
 
       const nextSource = model.getValue()
       lastGoodSourceRef.current = nextSource
       setSource(nextSource)
+      updateSignatureDecorations()
 
       if (sessionRef.current != null) {
         try {
@@ -157,9 +197,17 @@ export function useTyMonacoSession({
             version: null,
             message: formatError(error),
           })
+          setDiagnosticsState([])
         }
       }
     })
+    const previousContentListener = contentListenerRef.current
+    contentListenerRef.current = {
+      dispose() {
+        keydownListener.dispose()
+        previousContentListener?.dispose()
+      },
+    }
 
     try {
       const session = await createTySession(toVirtualSource(model.getValue()), {
@@ -224,6 +272,7 @@ export function useTyMonacoSession({
     editableLineCount: Math.max(source.split('\n').length, 1),
     handleMount,
     resetSource,
+    diagnostics,
   }
 }
 
@@ -265,4 +314,54 @@ function hasExpectedSignatures(
   }
 
   return true
+}
+
+function selectionTouchesSignature(
+  selection: {
+    startLineNumber: number
+    endLineNumber: number
+  },
+  model: editor.ITextModel,
+  definitions: readonly EditablePythonDefinition[],
+) {
+  const signatureLines = findSignatureLines(model, definitions)
+  return signatureLines.some(
+    (line) =>
+      line >= selection.startLineNumber && line <= selection.endLineNumber,
+  )
+}
+
+function findSignatureLines(
+  model: editor.ITextModel,
+  definitions: readonly EditablePythonDefinition[],
+) {
+  const lines: number[] = []
+  let nextSearchLine = 1
+
+  for (const { signature } of definitions) {
+    const matchingLine = Array.from(
+      { length: model.getLineCount() - nextSearchLine + 1 },
+      (_, index) => nextSearchLine + index,
+    ).find((line) => model.getLineContent(line) === signature)
+
+    if (matchingLine == null) {
+      return []
+    }
+
+    lines.push(matchingLine)
+    nextSearchLine = matchingLine + 1
+  }
+
+  return lines
+}
+
+function isMutatingKey(event: KeyboardEvent) {
+  const key = event.key
+  const modified = event.ctrlKey || event.metaKey
+
+  if (modified) {
+    return ['v', 'x', 'z', 'y'].includes(key.toLowerCase())
+  }
+
+  return key.length === 1 || ['Backspace', 'Delete', 'Enter', 'Tab'].includes(key)
 }

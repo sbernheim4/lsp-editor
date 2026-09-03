@@ -25,6 +25,7 @@ export function PythonEditor() {
     tyState,
     handleMount,
     resetSource,
+    diagnostics,
   } = useTyMonacoSession({
     predefinedPython: HIDDEN_PYTHON_PRELUDE,
     editableDefinitions: EDITABLE_DEFINITIONS,
@@ -73,6 +74,30 @@ export function PythonEditor() {
             }}
           />
         </div>
+      </section>
+      <section className="diagnostics-panel" aria-label="Diagnostics">
+        <div className="diagnostics-header">
+          <h2>Diagnostics</h2>
+          <span>{diagnostics.length}</span>
+        </div>
+        {diagnostics.length === 0 ? (
+          <p className="diagnostics-empty">No issues reported.</p>
+        ) : (
+          <ul className="diagnostics-list">
+            {diagnostics.map((diagnostic, index) => (
+              <li key={`${diagnostic.code}-${diagnostic.startLineNumber}-${index}`}>
+                <span className={`diagnostic-severity ${diagnostic.severity}`}>
+                  {diagnostic.severity}
+                </span>
+                <span className="diagnostic-location">
+                  {diagnostic.startLineNumber}:{diagnostic.startColumn}
+                </span>
+                <span>{diagnostic.message}</span>
+                <code>{diagnostic.code}</code>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
     </main>
   )

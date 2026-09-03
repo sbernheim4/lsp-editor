@@ -24,6 +24,14 @@ export type TyState =
       message: string
     }
 
+export type TyDiagnostic = {
+  code: string
+  message: string
+  severity: 'info' | 'warning' | 'error'
+  startLineNumber: number
+  startColumn: number
+}
+
 export type TySession = {
   module: TyModule
   workspace: import('ty_wasm').Workspace
@@ -247,7 +255,7 @@ export function setDiagnostics(
     return {
       code: diagnostic.id().toString(),
       message: diagnostic.message().toString(),
-      severity: severityToMarker(monaco, diagnostic.severity()),
+      severity: severityName(diagnostic.severity()),
       startLineNumber: range.start.line - lineOffset,
       startColumn: range.start.column,
       endLineNumber: range.end.line - lineOffset,
@@ -255,7 +263,22 @@ export function setDiagnostics(
     }
   })
 
-  monaco.editor.setModelMarkers(model, 'ty', markers)
+  monaco.editor.setModelMarkers(
+    model,
+    'ty',
+    markers.map((marker) => ({
+      ...marker,
+      severity: markerSeverity(monaco, marker.severity),
+    })),
+  )
+
+  return markers.map(({ code, message, severity, startLineNumber, startColumn }) => ({
+    code,
+    message,
+    severity,
+    startLineNumber,
+    startColumn,
+  }))
 }
 
 function hiddenDefinition(
@@ -295,17 +318,28 @@ function tyRangeToMonacoRange(range: import('ty_wasm').Range, lineOffset: number
   )
 }
 
-function severityToMarker(
-  monaco: typeof import('monaco-editor'),
+function severityName(
   severity: import('ty_wasm').Severity,
-) {
+): TyDiagnostic['severity'] {
   switch (severity) {
     case 0:
-      return monaco.MarkerSeverity.Info
+      return 'info'
     case 1:
+      return 'warning'
+    default:
+      return 'error'
+  }
+}
+
+function markerSeverity(
+  monaco: typeof import('monaco-editor'),
+  severity: TyDiagnostic['severity'],
+) {
+  switch (severity) {
+    case 'info':
+      return monaco.MarkerSeverity.Info
+    case 'warning':
       return monaco.MarkerSeverity.Warning
-    case 2:
-    case 3:
     default:
       return monaco.MarkerSeverity.Error
   }
