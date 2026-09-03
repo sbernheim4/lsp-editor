@@ -1,0 +1,79 @@
+import Editor from '@monaco-editor/react'
+import {
+  buildEditableSource,
+  useTyMonacoSession,
+} from '../lsp/useTyMonacoSession'
+
+const HIDDEN_PYTHON_PRELUDE = `from dataclasses import dataclass
+
+@dataclass
+class Car:
+    make: str
+    model: str
+`
+
+const EDITABLE_DEFINITIONS = [
+  {
+    signature: 'def include_car(car: Car) -> bool:',
+    initialBody: '    return car.make == "Toyota"',
+  },
+] as const
+
+export function PythonEditor() {
+  const initialSource = buildEditableSource(EDITABLE_DEFINITIONS)
+  const {
+    tyState,
+    handleMount,
+    resetSource,
+  } = useTyMonacoSession({
+    predefinedPython: HIDDEN_PYTHON_PRELUDE,
+    editableDefinitions: EDITABLE_DEFINITIONS,
+  })
+
+  return (
+    <main className="editor-shell">
+      <header className="topbar">
+        <div>
+          <h1>Python Car Editor</h1>
+          <p>Monaco with ty WASM over a single in-memory Python file.</p>
+        </div>
+        <div className="topbar-actions">
+          <button type="button" className="reset-button" onClick={resetSource}>
+            Reset
+          </button>
+          <div className={`status-pill ${tyState.status}`}>
+            <span>{tyState.status}</span>
+            {tyState.version ? <strong>ty {tyState.version}</strong> : null}
+          </div>
+        </div>
+      </header>
+
+      <section className="workspace">
+        <div className="editor-panel">
+          <Editor
+            height="100%"
+            defaultLanguage="python"
+            defaultPath="/main.py"
+            defaultValue={initialSource}
+            theme="vs-dark"
+            onMount={handleMount}
+            options={{
+              automaticLayout: true,
+              fontFamily:
+                'Menlo, Monaco, Consolas, "Liberation Mono", monospace',
+              fontSize: 14,
+              glyphMargin: true,
+              lineNumbersMinChars: 3,
+              minimap: { enabled: false },
+              padding: { top: 12, bottom: 12 },
+              scrollBeyondLastLine: false,
+              smoothScrolling: true,
+              tabSize: 4,
+              wordWrap: 'on',
+            }}
+          />
+        </div>
+      </section>
+    </main>
+  )
+}

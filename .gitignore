@@ -1,0 +1,9 @@
+node_modules
+dist
+.output
+.nitro
+.tanstack
+src/routeTree.gen.ts
+src/wasm/ty/pkg
+.vendor
+.DS_Store
