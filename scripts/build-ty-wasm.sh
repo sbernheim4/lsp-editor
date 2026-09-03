@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VENDOR_DIR="$ROOT_DIR/.vendor"
 RUFF_DIR="$VENDOR_DIR/ruff"
 OUT_DIR="$ROOT_DIR/src/wasm/ty/pkg"
+RUFF_COMMIT="53a94487e7f35600cd2a554099f2dd7518d18798"
 
 mkdir -p "$VENDOR_DIR"
 
@@ -19,10 +20,10 @@ fi
 
 if [ ! -d "$RUFF_DIR/.git" ]; then
   git clone --depth 1 https://github.com/astral-sh/ruff.git "$RUFF_DIR"
-else
-  git -C "$RUFF_DIR" fetch --depth 1 origin main
-  git -C "$RUFF_DIR" checkout FETCH_HEAD
 fi
+
+git -C "$RUFF_DIR" fetch --depth 1 origin "$RUFF_COMMIT"
+git -C "$RUFF_DIR" checkout --detach "$RUFF_COMMIT"
 
 (
   cd "$RUFF_DIR"

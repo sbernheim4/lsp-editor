@@ -1,3 +1,5 @@
 # ty_wasm
 
-Run `npm run build:ty-wasm` after Rust is installed. The script builds Astral's `crates/ty_wasm` package into `src/wasm/ty/pkg`, which is intentionally ignored because it is generated.
+The generated package is intentionally ignored. `npm run dev` and `npm run build` automatically create it when it is missing.
+
+Rust is required for the first build. To explicitly regenerate the pinned ty WASM package, run `npm run build:ty-wasm`.

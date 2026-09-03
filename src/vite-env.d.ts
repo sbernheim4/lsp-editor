@@ -14,6 +14,7 @@ declare module 'ty_wasm' {
     sourceText(file: FileHandle): string
     hover(file: FileHandle, position: Position): Hover | undefined
     completions(file: FileHandle, position: Position): Completion[]
+    signatureHelp(file: FileHandle, position: Position): SignatureHelp | undefined
     inlayHints(file: FileHandle, range: Range): InlayHint[]
   }
 
@@ -110,5 +111,22 @@ declare module 'ty_wasm' {
   export type InlayHint = {
     label: Array<{ label: string }>
     position: Position
+  }
+
+  export type SignatureHelp = {
+    active_signature?: number
+    signatures: SignatureInformation[]
+  }
+
+  export type SignatureInformation = {
+    active_parameter?: number
+    documentation?: string
+    label: string
+    parameters: ParameterInformation[]
+  }
+
+  export type ParameterInformation = {
+    documentation?: string
+    label: string
   }
 }

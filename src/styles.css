@@ -161,11 +161,25 @@ textarea {
 }
 
 .diagnostics-list li {
+  min-width: 0;
+}
+
+.diagnostic-button {
   display: flex;
+  width: 100%;
   align-items: baseline;
   gap: 9px;
+  padding: 3px 0;
+  border: 0;
+  background: transparent;
   color: #d8dde3;
+  cursor: pointer;
   font-size: 12px;
+  text-align: left;
+}
+
+.diagnostic-button:hover {
+  color: #ffffff;
 }
 
 .diagnostic-severity {

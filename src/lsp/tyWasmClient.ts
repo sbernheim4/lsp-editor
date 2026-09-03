@@ -1,5 +1,4 @@
-import type { editor, languages } from 'monaco-editor'
-import { Range as MonacoRange } from 'monaco-editor'
+import type { editor } from 'monaco-editor'
 
 type TyModule = typeof import('ty_wasm') & {
   version?: () => string
@@ -96,6 +95,7 @@ export function registerTyProviders(
   monaco: typeof import('monaco-editor'),
   sessionRef: React.MutableRefObject<TySession | null>,
   lineOffset: number,
+  commandKeyRef: React.MutableRefObject<boolean>,
 ) {
   const disposables = [
     monaco.languages.registerHoverProvider('python', {
@@ -117,18 +117,22 @@ export function registerTyProviders(
           return undefined
         }
 
-        const definition = hiddenDefinition(
-          session,
-          position.lineNumber + lineOffset,
-          position.column,
-          lineOffset,
-        )
+        const definition = commandKeyRef.current
+          ? undefined
+          : hiddenDefinition(
+              session,
+              position.lineNumber + lineOffset,
+              position.column,
+              lineOffset,
+            )
+        const hasDefinitionAlready =
+          definition != null && hover.markdown.includes(definition)
 
         return {
           range: tyRangeToMonacoRange(hover.range, lineOffset),
           contents: [
             { value: hover.markdown },
-            ...(definition == null
+            ...(definition == null || hasDefinitionAlready
               ? []
               : [
                   {
@@ -190,6 +194,89 @@ export function registerTyProviders(
             range: replacementRange,
           })),
         }
+      },
+    }),
+    monaco.languages.registerSignatureHelpProvider('python', {
+      signatureHelpTriggerCharacters: ['(', ','],
+      signatureHelpRetriggerCharacters: [','],
+      provideSignatureHelp(model, position) {
+        const session = sessionRef.current
+        if (session == null) {
+          return undefined
+        }
+
+        const help = session.workspace.signatureHelp(
+          session.file,
+          new session.module.Position(
+            position.lineNumber + lineOffset,
+            position.column,
+          ),
+        )
+
+        if (help == null || help.signatures.length === 0) {
+          return undefined
+        }
+
+        return {
+          value: {
+            signatures: help.signatures.map((signature) => ({
+              label: signature.label,
+              documentation: signature.documentation,
+              parameters: signature.parameters.map((parameter) => ({
+                label: parameter.label,
+                documentation: parameter.documentation,
+              })),
+              activeParameter: signature.active_parameter,
+            })),
+            activeSignature: help.active_signature ?? 0,
+            activeParameter:
+              help.signatures[help.active_signature ?? 0]?.active_parameter ?? 0,
+          },
+          dispose() {},
+        }
+      },
+    }),
+    monaco.languages.registerDocumentSymbolProvider('python', {
+      provideDocumentSymbols(model) {
+        const functionLines: number[] = []
+        for (let line = 1; line <= model.getLineCount(); line += 1) {
+          if (/^(?:async\s+)?def\s+[A-Za-z_]\w*/.test(model.getLineContent(line))) {
+            functionLines.push(line)
+          }
+        }
+
+        return functionLines.flatMap((line, index) => {
+          const signature = model.getLineContent(line)
+          const match = signature.match(/^\s*(?:async\s+)?def\s+([A-Za-z_]\w*)/)
+          if (match == null) {
+            return []
+          }
+
+          const nameStart = signature.indexOf(match[1]) + 1
+          const endLine =
+            functionLines[index + 1] == null
+              ? model.getLineCount()
+              : functionLines[index + 1] - 1
+
+          return {
+            name: match[1],
+            detail: signature.trim(),
+            kind: monaco.languages.SymbolKind.Function,
+            range: {
+              startLineNumber: line,
+              startColumn: 1,
+              endLineNumber: endLine,
+              endColumn: model.getLineMaxColumn(endLine),
+            },
+            selectionRange: {
+              startLineNumber: line,
+              startColumn: nameStart,
+              endLineNumber: line,
+              endColumn: nameStart + match[1].length,
+            },
+            tags: [],
+          }
+        })
       },
     }),
     monaco.languages.registerInlayHintsProvider('python', {
@@ -300,8 +387,24 @@ function hiddenDefinition(
     }
 
     const sourceLines = session.workspace.sourceText(session.file).split('\n')
-    const startLine = Math.max(definition.full_range.start.line - 1, 0)
-    const endLine = Math.min(definition.full_range.end.line, sourceLines.length)
+    const definitionLine = Math.max(definition.full_range.start.line - 1, 0)
+    const baseIndent = sourceLines[definitionLine].match(/^\s*/)?.[0].length ?? 0
+    let startLine = definitionLine
+    while (startLine > 0 && /^\s*@/.test(sourceLines[startLine - 1])) {
+      startLine -= 1
+    }
+
+    let endLine = Math.min(
+      Math.max(definition.full_range.end.line, definition.full_range.start.line + 1),
+      sourceLines.length,
+    )
+    while (endLine < sourceLines.length) {
+      const lineText = sourceLines[endLine]
+      if (lineText.trim() !== '' && (lineText.match(/^\s*/)?.[0].length ?? 0) <= baseIndent) {
+        break
+      }
+      endLine += 1
+    }
 
     return sourceLines.slice(startLine, endLine).join('\n').trimEnd()
   } catch {
@@ -310,12 +413,12 @@ function hiddenDefinition(
 }
 
 function tyRangeToMonacoRange(range: import('ty_wasm').Range, lineOffset: number) {
-  return new MonacoRange(
-    range.start.line - lineOffset,
-    range.start.column,
-    range.end.line - lineOffset,
-    range.end.column,
-  )
+  return {
+    startLineNumber: range.start.line - lineOffset,
+    startColumn: range.start.column,
+    endLineNumber: range.end.line - lineOffset,
+    endColumn: range.end.column,
+  }
 }
 
 function severityName(

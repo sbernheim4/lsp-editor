@@ -1,4 +1,5 @@
 import Editor from '@monaco-editor/react'
+import '../monaco'
 import {
   buildEditableSource,
   useTyMonacoSession,
@@ -26,6 +27,7 @@ export function PythonEditor() {
     handleMount,
     resetSource,
     diagnostics,
+    revealDiagnostic,
   } = useTyMonacoSession({
     predefinedPython: HIDDEN_PYTHON_PRELUDE,
     editableDefinitions: EDITABLE_DEFINITIONS,
@@ -86,6 +88,11 @@ export function PythonEditor() {
           <ul className="diagnostics-list">
             {diagnostics.map((diagnostic, index) => (
               <li key={`${diagnostic.code}-${diagnostic.startLineNumber}-${index}`}>
+                <button
+                  type="button"
+                  className="diagnostic-button"
+                  onClick={() => revealDiagnostic(diagnostic)}
+                >
                 <span className={`diagnostic-severity ${diagnostic.severity}`}>
                   {diagnostic.severity}
                 </span>
@@ -94,6 +101,7 @@ export function PythonEditor() {
                 </span>
                 <span>{diagnostic.message}</span>
                 <code>{diagnostic.code}</code>
+                </button>
               </li>
             ))}
           </ul>

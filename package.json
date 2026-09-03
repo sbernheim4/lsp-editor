@@ -3,11 +3,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite dev",
-    "build": "vite build && tsc --noEmit",
+    "dev": "npm run ensure:ty-wasm && vite dev",
+    "build": "npm run ensure:ty-wasm && vite build && tsc --noEmit",
     "typecheck": "tsc --noEmit",
     "start": "node .output/server/index.mjs",
-    "build:ty-wasm": "bash scripts/build-ty-wasm.sh"
+    "build:ty-wasm": "bash scripts/build-ty-wasm.sh",
+    "ensure:ty-wasm": "bash scripts/ensure-ty-wasm.sh"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
